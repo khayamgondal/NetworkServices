@@ -1,0 +1,108 @@
+heat_template_version: 2014-10-16
+description: A Simple autoscaling template
+
+ 
+parameters:
+
+  Mirror:
+    type: string
+    label: Mirroring Port
+    description: Select the Port on which you want to Mirror the traffic
+    constraints:
+     - allowed_values:
+       - port1
+       - fm00
+ 
+  first_vm_ip:
+    type: string
+    label: First VM IP
+    description: IP which you want to assign to First VM
+    default: 192.168.1.30
+
+  second_vm_ip:
+    type: string
+    label: Second VM IP
+    description: IP which you want to assign to Second VM
+    default: 192.168.1.40	
+
+
+
+
+resources:
+  auto_scale_server:
+    type: OS::Heat::AutoScalingGroup
+    properties:
+      min_size: 0
+      max_size: 1
+      resource:       
+          type: OS::Nova::Server
+          properties:
+            name: Scaled_Blade
+            image: UbuntuDemo
+            flavor: g1.disk
+            key_name: htor
+            networks: [{network: internal}]  
+            user_data:
+              str_replace:
+                template: |
+                  #!/bin/bash -v
+                  ifconfig eth1 $secondIP
+                params:
+                  $secondIP: {get_param: second_vm_ip}
+            
+ 
+  first_blade:
+    type: OS::Nova::Server
+    properties:
+      name: First_Blade
+      image: UbuntuDemo
+      flavor: g1.disk
+      key_name: htor
+      networks: [{network: internal}]
+      metadata: {"metering.stack": {get_param: "OS::stack_id"}}
+      user_data:
+        str_replace:
+          template: |
+            #!/bin/bash -v
+            ifconfig eth1 $firstIP
+          params:
+            $firstIP: {get_param: first_vm_ip}
+ 
+  scale_up_policy: 
+    type: OS::Heat::ScalingPolicy
+    properties:
+      adjustment_type: change_in_capacity
+      auto_scaling_group_id: {get_resource: auto_scale_server}
+      cooldown: 10
+      scaling_adjustment: 1
+  
+ 
+  cpu_alarm_high:
+    type: OS::Ceilometer::Alarm
+    properties:
+      description: Scale-up if the average CPU > 70% for 60 secs
+      meter_name: cpu_util
+      statistic: max
+      period: 30
+      evaluation_periods: 1
+      threshold: 70.0
+      alarm_actions:
+        - {get_attr: [scale_up_policy, alarm_url]}
+        - str_replace:
+            template: http://172.16.10.223/html/$pr
+            params:
+              $pr: {get_param: Mirror}	
+      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
+      comparison_operator: gt
+  
+outputs:
+  alarm_URL:
+    value: {get_attr: [scale_up_policy, alarm_url]}
+  rule_URL:
+    value: 
+      str_replace:
+        template: http://172.16.10.223/html/$pr
+        params:
+          $pr: {get_param: Mirror}	
+           
+
