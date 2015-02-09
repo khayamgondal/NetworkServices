@@ -3972,7 +3972,10 @@ class LibvirtDriver(driver.ComputeDriver):
                 dnic.source_dev = row[0]
                 dnic.source_mode = "passthrough"
                 dnic.model = "virtio"
-                dnic.mac_addr= randomMAC()
+                if (row[0] == 'p3p2'):
+                  dnic.mac_addr = '12:13:14:15:16:1b'
+                else:
+                  dnic.mac_addr= randomMAC()
                 guest.add_device(dnic)
                 LOG.info(row[0] +' has been attached to '+instance['name'])
                 insname = instance['name']
